@@ -1,6 +1,9 @@
 <template>
-    <div>
-        <h1>test</h1>
+    <div class="card-box">
+        <div class="card">
+            <img src="" alt="">
+            <h3>تست</h3>
+        </div>
     </div>
 </template>
 
@@ -8,4 +11,29 @@
 
 </script>
 
-<style scoped></style>
+<style scoped>
+.card-box {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.card {
+    width: 100%;
+    max-width: 10rem;
+    padding: 0.5rem;
+    border-radius: 8px;
+    box-shadow: 0px 0px 8px 0px rgba(117,117,117,0.75);
+}
+
+.card img{
+    aspect-ratio: 16 / 9;
+    border-radius: 6px;
+
+}
+
+.card h3{
+    text-align: end;
+    margin: 0.8rem 0;
+}
+
+</style>

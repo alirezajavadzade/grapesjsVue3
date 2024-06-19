@@ -1,5 +1,31 @@
 <template>
-  <div id="gjs" ref="gjs">
+  <div class="main">
+    <div id="gjs" ref="gjs">
+    </div>
+
+    <!-- save modal -->
+    <ModalConfirm v-model="saveTemplateModal" title="انتخاب فرمت" @click="saveTemplateModal = true">
+      <div class="save-box">
+        <label>نام فرمت خود را وارد کنید : </label>
+        <input v-model="inputName" type="text" id="save-input">
+      </div>
+      <div class="save-box">
+        <label>عکس قالب را وارد کنید : </label>
+        <input type="file" id="thumbnail-input" accept="image/jpg" @change="templateImage">
+      </div>
+      <div class="action-box">
+        <button class="save-btn" @click="saveName">ذخیره</button>
+      </div>
+    </ModalConfirm>
+    <!-- list modal  -->
+    <ModalConfirm v-model="loadTemplateModal" title="فرمت ها" @click="loadTemplateModal = true">
+      <div class="cardBox">
+        <div class="card" v-for="(item, i) in listItem" :key="i" @click="getItem(item.id)">
+          <img :src="`${item.prefix};base64,${item.thumbnail}`" alt="" width="100%">
+          <h3>{{ item.name }}</h3>
+        </div>
+      </div>
+    </ModalConfirm>
   </div>
 </template>
 
@@ -17,15 +43,72 @@ import fa from 'grapesjs/locale/fa';
 import grapesjsRulers from 'grapesjs-rulers'
 import 'grapesjs-rulers/dist/grapesjs-rulers.min.css'
 import axios from 'axios';
+import ModalConfirm from '@/components/ModalConfirm.vue'
+
+
+
 
 const editor = ref(null);
 const gjs = ref();
 const projectEndpoint = "http://172.16.1.63:3500/template";
-const currentId = ref('0');
+const currentId = ref(0);
+const beforebase64Url = ref();
+const thumbnailInput = ref('');
+const obj = ref({});
+const listItem = ref([]);
+const saveTemplateModal = ref(false);
+const loadTemplateModal = ref(false);
+const inputName = ref('');
+
+
+const templateImage = function (ev) {
+  // convert to base64
+  let file = ev.target.files[0]
+  let reader = new FileReader();
+  reader.onloadend = function () {
+    console.log(reader.result)
+    let base64Url = reader.result.split(';base64,')
+    beforebase64Url.value = base64Url[0]
+    thumbnailInput.value = base64Url[1]
+    console.log(beforebase64Url.value)
+    console.log(thumbnailInput.value)
+  }
+  reader.readAsDataURL(file);
+}
+
+const saveName = async function () {
+  const storedProjectData = await editor.value.store();
+  obj.value.data = storedProjectData;
+  obj.value.name = inputName.value;
+  obj.value.thumbnail = thumbnailInput.value;
+  obj.value.prefix = beforebase64Url.value
+  await axios.post(projectEndpoint, { templateData: obj.value }, {
+    headers: { "Access-Control-Allow-Origin": "*" }
+  }).then(
+    (response) => {
+      saveTemplateModal.value = false
+      console.log(response)
+    })
+}
+
+const getList = async function () {
+  await axios.get(projectEndpoint).then(
+    (response) => {
+      listItem.value = response.data
+    })
+}
+
+const getItem = async function (e) {
+  await axios.get(`${projectEndpoint}/${e}`).then(
+    (response) => {
+      loadTemplateModal.value = false
+      console.log(response)
+    })
+}
+
 
 
 onMounted(() => {
-
 
   editor.value = grapesjs.init({
     height: '100%',
@@ -34,7 +117,7 @@ onMounted(() => {
     fromElement: true,
     noticeOnUnload: false,
     dragMode: 'absolute',
-    pageManager: true,
+    pageManager: false,
     deviceManager: {
       devices: [{
         name: 'A3',
@@ -67,9 +150,20 @@ onMounted(() => {
         {
           id: 'save-data',
           run() {
-            console.log('x')
+            saveTemplateModal.value = true;
           }
-        }
+        },
+        {
+          id: 'load-data',
+          async run() {
+            loadTemplateModal.value = true
+            await getList()
+            // const loadedProjectData = await editor.value.load();
+            // loadedProjectData
+            // obj.value = loadedProjectData
+            // console.log(obj.value)
+          }
+        },
       ],
     },
     i18n: {
@@ -80,28 +174,29 @@ onMounted(() => {
     selectorManager: {
       componentFirst: true,
     },
+    storageManager: false,
     // storageManager: {
-    // type : "local",
-    // autosave: true,
-    // autoload: true,
-    // options: {
-    //   local: {
-    //     key: 'alireza',
-    //   },
-    // }
+    //   type: "local",
+    //   autosave: true,
+    //   autoload: true,
+    //   options: {
+    //     local: {
+    //       key: 'gpjs-project',
+    //     },
+    //   }
     // },
 
 
-    storageManager: {
-      type: 'remote',
-      autosave: true,
-      contentTypeJson: true,
-      stepsBeforeSave: 3,
-      storeComponents: true,
-      storeStyles: true,
-      storeHtml: true,
-      storeCss: true,
-    },
+    // storageManager: {
+    //   type: 'remote',
+    //   autosave: true,
+    //   contentTypeJson: true,
+    //   stepsBeforeSave: 0,
+    //   storeComponents: true,
+    //   storeStyles: true,
+    //   storeHtml: true,
+    //   storeCss: true,
+    // },
 
 
     plugins: [gjsBlocksBasic, grapesjsPluginForms, grapesjsPluginExport, grapesjsPresetWebpage, grapesjsIndexeddb, grapesjsTemplates, grapesjsRulers],
@@ -116,11 +211,13 @@ onMounted(() => {
         modalImportContent: function (editor) {
           return editor.getHtml() + '<style>' + editor.getCss() + '</style>'
         },
-        grapesjsTemplates: {
-          // templates: 'http://172.16.1.63:3500/template',
-          // projects: 'http://172.16.1.63:3500/template',
-          onStore: 'http://172.16.1.63:3500/template'
-        },
+      },
+      grapesjsTemplates: {
+        templates: 'http://172.16.1.63:3500/template',
+        projects: 'http://172.16.1.63:3500/template',
+        // onStore: store(obj.value),
+        // onLoad: load(obj.value),
+        // onDelete: 'http://172.16.1.63:3500/template'
       },
     },
     blockManager: {
@@ -131,13 +228,13 @@ onMounted(() => {
           category: 'constant',
           media: `<svg fill="#000000" version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512" xml:space="preserve"><g><g><g><path d="M490.667,0H21.333C9.536,0,0,9.557,0,21.333V128h512V21.333C512,9.557,502.464,0,490.667,0z M85.333,106.667C73.557,106.667,64,97.109,64,85.333S73.557,64,85.333,64s21.333,9.557,21.333,21.333S97.109,106.667,85.333,106.667zM149.333,106.667c-11.776,0-21.333-9.557-21.333-21.333S137.557,64,149.333,64s21.333,9.557,21.333,21.333S161.109,106.667,149.333,106.667z M213.333,106.667c-11.776,0-21.333-9.557-21.333-21.333S201.557,64,213.333,64s21.333,9.557,21.333,21.333S225.109,106.667,213.333,106.667z"/><rect y="170.667" width="512" height="192"/><path d="M0,490.667C0,502.443,9.536,512,21.333,512h469.333c11.797,0,21.333-9.557,21.333-21.333v-85.333H0V490.667z"/></g></g></g></svg>`,
           content: {
-            type: 'div',
+            type: 'default',
             attributes: { class: 'footer' },
             components: [{
-              type: 'div',
+              type: 'default',
               content: 'Hello world!!!'
             }, {
-              type: 'div',
+              type: 'default',
               content: 'Hello world!!!'
             }],
             styles: `.footer { width:100%; color:red; }`,
@@ -147,9 +244,6 @@ onMounted(() => {
       ],
     },
   });
-
-
-
 
 
   const pn = editor.value.Panels;
@@ -205,17 +299,121 @@ onMounted(() => {
   }]);
 
 
+  panelViews.get('buttons').add([{
+    attributes: {
+      title: 'load data'
+    },
+    context: 'load-data',
+    label: `<svg width="22px" height="22px" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M3 4H21" stroke="#222222" stroke-width="2" stroke-linecap="round"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M19 4H5V15.8C5 16.9201 5 17.4802 5.21799 17.908C5.40973 18.2843 5.71569 18.5903 6.09202 18.782C6.51984 19 7.0799 19 8.2 19H15.8C16.9201 19 17.4802 19 17.908 18.782C18.2843 18.5903 18.5903 18.2843 18.782 17.908C19 17.4802 19 16.9201 19 15.8V4ZM11 15V11.4142L9.70711 12.7071C9.31658 13.0976 8.68342 13.0976 8.29289 12.7071C7.90237 12.3166 7.90237 11.6834 8.29289 11.2929L11.1868 8.39896C11.2053 8.38051 11.2242 8.36282 11.2436 8.34589C11.4269 8.13403 11.6978 8 12 8C12.3022 8 12.5731 8.13403 12.7564 8.34589C12.7758 8.36282 12.7947 8.38051 12.8132 8.39896L15.7071 11.2929C16.0976 11.6834 16.0976 12.3166 15.7071 12.7071C15.3166 13.0976 14.6834 13.0976 14.2929 12.7071L13 11.4142V15C13 15.5523 12.5523 16 12 16C11.4477 16 11 15.5523 11 15Z" fill="#222222"/>
+</svg>`,
+    command: 'load-data',
+    id: 'load-data'
+  }]);
+
+
+  const saveModal = editor.value.Modal;
+  const savedataModal = () => {
+    saveModal.open({
+      title: 'ذخیره فرمت نامه',
+      content: `
+    <div class="save-box">
+      <label>نام فرمت خود را وارد کنید : </label>
+      <input type="text" id="save-input">
+    </div>
+    <div class="save-box">
+      <label>عکس قالب را وارد کنید : </label>
+      <input type="file" id="thumbnail-input" accept="image/jpg">
+    </div>
+    <div class="action-box">
+      <button class="save-btn" id="saveBtn">ذخیره</button>
+    </div>
+    `, // string | HTMLElement
+      attributes: {
+        class: 'my-small-modal',
+      },
+    });
+  };
+
+
+  const loadModal = editor.value.Modal;
+  const loadDataModal = () => {
+    loadModal.open({
+      title: 'فرمت خود را انتخاب کنید',
+      content: `
+      <div class="card-box" id="cardBox"></div>`,
+      attributes: {
+        class: 'load-modal'
+      }
+    })
+  }
+
+
+
+
   editor.value.Storage.add('remote', {
-    // async load() {
-    //   return await axios.get(projectEndpoint);
-    // },
+    async load(x) {
+      console.log(x)
+      // get data from DB
+      // const response = await axios.get(projectEndpoint);
+      // let data = JSON.parse(response.data);
+      // localStorage.setItem('gjs-projects', data);
+      // return data
+
+
+
+      // const response = await axios.get(projectEndpoint);
+      // let data = JSON.parse(response.data[0].templateData)
+      // return data
+
+      // let id = localStorage.getItem('id')
+      // console.log(id)
+
+
+
+
+      //   response.data.map((i, key, { length }) => {
+      //     if (i._id == currentId.value) {
+      //       let data = JSON.parse(i.templateData)
+      //       return data
+      //     } else {
+      //       if (key + 1 == length) {
+      //         let data = JSON.parse(i.templateData)
+      //         return data
+      //       }
+      //     }
+      //   })
+    },
+
+
 
     async store(data) {
-      return await axios.post(projectEndpoint, { id: currentId.value, templateData: data }).then(
-        (response) => {
-          currentId.value = response.data.id
+      console.log(data)
+      // update template
+      currentId.value = data.pages[0].id
+      let x = JSON.parse(localStorage.getItem('gjs-projects'))
+      x.map((i) => {
+        if (i.data.pages[0].id == currentId.value) {
+          i.data = data
         }
-      );
+      })
+      localStorage.setItem('gjs-projects', JSON.stringify(x))
+
+
+      return await axios.post(projectEndpoint, { templateData: x }).then(
+        (response) => {
+          console.log(response)
+        }
+      )
+
+
+      // return await axios.post(projectEndpoint, { id: currentId.value, templateData: data }).then(
+      //   (response) => {
+      //     currentId.value = response.data._id
+      //     localStorage.setItem('id', currentId.value.toString())
+      //   }
+      // );
     },
   });
 
@@ -236,14 +434,16 @@ onMounted(() => {
 
 
 
-// pn.addButton('options', [{ id: 'save-database', className: 'fa fa-floppy-o', command: 'save-database', attributes: { title: 'Save to database' } }])
-
-
-
 
 </script>
 
 <style>
+.main {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
 #gjs {
   height: 100%;
 }
@@ -252,5 +452,80 @@ onMounted(() => {
   .gjs-pn-panels {
     display: none;
   }
+}
+
+.save-box {
+  display: flex;
+  /* flex-direction: column; */
+  justify-content: space-between;
+  align-items: center;
+  direction: rtl;
+  padding: 2rem 0.5rem;
+}
+
+.save-box input {
+  margin: 0.5rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #000;
+}
+
+.save-box input:focus-visible {
+  outline: none;
+}
+
+.my-small-modal .gjs-mdl-dialog {
+  max-width: 500px;
+}
+
+.save-btn {
+  border: 0;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.card-box {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.card {
+  width: 100%;
+  max-width: 10rem;
+  padding: 0.5rem;
+  border-radius: 4px;
+  box-shadow: 0px 0px 8px 0px rgba(117, 117, 117, 0.75);
+  margin: 1rem;
+}
+
+.card img {
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+}
+
+.card h3 {
+  text-align: end;
+  margin: 0.8rem 0;
+}
+
+/* modal */
+.save-modal {
+  display: flex;
+  position: fixed;
+  width: 30rem;
+  height: 30rem;
+  border-radius: 16px;
+  position: fixed;
+  left: 35%;
+  top: 20%;
+  background: #3c3133;
+  z-index: 100;
+}
+
+.cardBox {
+  display: flex;
+  flex-wrap: wrap;
 }
 </style>
