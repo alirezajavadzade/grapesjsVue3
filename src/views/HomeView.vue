@@ -4,7 +4,7 @@
     </div>
 
     <!-- save modal -->
-    <ModalConfirm v-model="saveTemplateModal" title="انتخاب فرمت" @click="saveTemplateModal = true">
+    <ModalConfirm v-model="saveTemplateModal" title="انتخاب فرمت">
       <div class="save-box">
         <label>نام فرمت خود را وارد کنید : </label>
         <input v-model="inputName" type="text" id="save-input">
@@ -14,16 +14,43 @@
         <input type="file" id="thumbnail-input" accept="image/jpg" @change="templateImage">
       </div>
       <div class="action-box">
-        <button class="save-btn" @click="saveName">ذخیره</button>
+        <button class="save-btn" @click="saveTemplate">ذخیره</button>
       </div>
     </ModalConfirm>
+
     <!-- list modal  -->
-    <ModalConfirm v-model="loadTemplateModal" title="فرمت ها" @click="loadTemplateModal = true">
-      <div class="cardBox">
+    <ModalConfirm v-model="loadTemplateModal" title="فرمت ها">
+      <div class="cardBox" v-if="listItem.length !== 0">
         <div class="card" v-for="(item, i) in listItem" :key="i" @click="getItem(item.id)">
-          <img :src="`${item.prefix};base64,${item.thumbnail}`" alt="" width="100%">
+          <deleteIcon class="delete-icon" @click="deleteTemplate(item.id)" />
+          <img v-if="item.thumbnail == ''" src="/src/assets/placeholder.png" alt="" width="100%">
+          <img v-else :src="`${item.prefix}${item.thumbnail}`" alt="" width="100%">
           <h3>{{ item.name }}</h3>
         </div>
+      </div>
+      <div class="cardBox" v-else>
+        <p>دیتای ذخیره شده ای ندارید!</p>
+      </div>
+    </ModalConfirm>
+
+    <!-- update modal -->
+    <ModalConfirm v-model="updateTemplateModal" title="به روز رسانی فرمت">
+      <div>
+        <h4>آیا قالب قبلا ذخیره شده است</h4>
+        <p>آیا میخواهید این قالب به روز رسانی شود؟</p>
+      </div>
+      <div class="action-box">
+        <button class="save-btn" @click="updateTemplate">ذخیره</button>
+        <button class="save-btn" @click="updateTemplateModal = false">انصراف</button>
+      </div>
+    </ModalConfirm>
+
+    <!-- delete modal -->
+    <ModalConfirm v-model="deleteTemplateModal" title="حذف فرمت">
+      <h3 class="modal-text">آیا از حذف این فرمت مطمئن هستید؟</h3>
+      <div class="action-box">
+        <button class="save-btn submit" @click="submitDelete">حذف</button>
+        <button class="save-btn" @click="deleteTemplateModal = false">انصراف</button>
       </div>
     </ModalConfirm>
   </div>
@@ -33,84 +60,120 @@
 import { ref, onMounted } from 'vue';
 import 'grapesjs/dist/css/grapes.min.css';
 import grapesjs from 'grapesjs';
+import fa from 'grapesjs/locale/fa';
 import gjsBlocksBasic from 'grapesjs-blocks-basic';
 import grapesjsPluginForms from 'grapesjs-plugin-forms';
 import grapesjsPluginExport from 'grapesjs-plugin-export';
 import grapesjsPresetWebpage from 'grapesjs-preset-webpage';
 import grapesjsTemplates from 'grapesjs-templates';
 import grapesjsIndexeddb from 'grapesjs-indexeddb';
-import fa from 'grapesjs/locale/fa';
 import grapesjsRulers from 'grapesjs-rulers'
 import 'grapesjs-rulers/dist/grapesjs-rulers.min.css'
 import axios from 'axios';
 import ModalConfirm from '@/components/ModalConfirm.vue'
+import deleteIcon from '@/assets/delete.svg'
 
 
 
 
-const editor = ref(null);
+
+let editor = "";
 const gjs = ref();
 const projectEndpoint = "http://172.16.1.63:3500/template";
-const currentId = ref(0);
 const beforebase64Url = ref();
 const thumbnailInput = ref('');
 const obj = ref({});
+const updateObj = ref({});
 const listItem = ref([]);
 const saveTemplateModal = ref(false);
 const loadTemplateModal = ref(false);
+const updateTemplateModal = ref(false);
+const deleteTemplateModal = ref(false)
 const inputName = ref('');
+const templateId = ref('');
+const currentItem = ref('');
+const currentId = ref('');
 
-
-const templateImage = function (ev) {
+const templateImage = (ev) => {
   // convert to base64
   let file = ev.target.files[0]
   let reader = new FileReader();
   reader.onloadend = function () {
-    console.log(reader.result)
-    let base64Url = reader.result.split(';base64,')
-    beforebase64Url.value = base64Url[0]
-    thumbnailInput.value = base64Url[1]
+    let base64Url = reader.result.split(';base64,');
+    beforebase64Url.value = base64Url[0] + ';base64,';
+    thumbnailInput.value = base64Url[1];
+
     console.log(beforebase64Url.value)
-    console.log(thumbnailInput.value)
   }
   reader.readAsDataURL(file);
 }
 
-const saveName = async function () {
-  const storedProjectData = await editor.value.store();
-  obj.value.data = storedProjectData;
+const saveTemplate = async () => {
+  const storedProjectData = await editor.store();
+  obj.value.id = storedProjectData.pages[0].id
+  obj.value.data = JSON.stringify(storedProjectData);
   obj.value.name = inputName.value;
   obj.value.thumbnail = thumbnailInput.value;
   obj.value.prefix = beforebase64Url.value
-  await axios.post(projectEndpoint, { templateData: obj.value }, {
-    headers: { "Access-Control-Allow-Origin": "*" }
-  }).then(
+  axios.post(projectEndpoint, { templateData: obj.value },).then(
     (response) => {
-      saveTemplateModal.value = false
-      console.log(response)
+      saveTemplateModal.value = false;
     })
 }
 
-const getList = async function () {
-  await axios.get(projectEndpoint).then(
+const getList = () => {
+  loadTemplateModal.value = true
+  axios.get(projectEndpoint).then(
     (response) => {
       listItem.value = response.data
     })
 }
 
-const getItem = async function (e) {
-  await axios.get(`${projectEndpoint}/${e}`).then(
+const getItem = (e) => {
+  axios.get(`${projectEndpoint}/${e}`).then(
     (response) => {
-      loadTemplateModal.value = false
+      loadTemplateModal.value = false;
+      currentItem.value = response.data[0]
+      const currentData = JSON.parse(currentItem.value.data)
+      editor.loadProjectData(currentData);
+      currentId.value = currentData.pages[0].id;
+    })
+}
+
+const updateTemplate = async () => {
+  const storedProjectData = await editor.store();
+  updateObj.value.data = JSON.stringify(storedProjectData);
+  updateObj.value.name = currentItem.value.name;
+  updateObj.value.thumbnail = currentItem.value.thumbnail;
+  updateObj.value.prefix = currentItem.value.prefix
+  axios.put(`${projectEndpoint}/${currentId.value}`, { templateData: updateObj.value }).then(
+    (response) => {
+      updateTemplateModal.value = false;
       console.log(response)
+    }
+  )
+}
+
+const deleteTemplate = function (e) {
+  templateId.value = e;
+  deleteTemplateModal.value = true;
+}
+
+const submitDelete = function () {
+  axios.delete(`${projectEndpoint}/${templateId.value}`).then(
+    (response) => {
+      deleteTemplateModal.value = false;
+      loadTemplateModal.value = false;
+      getList()
     })
 }
 
 
 
-onMounted(() => {
 
-  editor.value = grapesjs.init({
+
+onMounted(() => {
+  editor = grapesjs.init({
     height: '100%',
     container: gjs.value,
     showOffsets: true,
@@ -150,20 +213,31 @@ onMounted(() => {
         {
           id: 'save-data',
           run() {
-            saveTemplateModal.value = true;
+            if (currentId.value !== '') {
+              updateTemplateModal.value = true;
+            } else {
+              saveTemplateModal.value = true;
+            }
+
           }
         },
         {
           id: 'load-data',
           async run() {
-            loadTemplateModal.value = true
             await getList()
-            // const loadedProjectData = await editor.value.load();
-            // loadedProjectData
-            // obj.value = loadedProjectData
-            // console.log(obj.value)
           }
         },
+        // {
+        //   id: 'test',
+        //   async run() {
+        //     axios.get(`${projectEndpoint}/AaJyVt0ZbVuKYBd5`).then(
+        //       (response) => {
+        //         loadTemplateModal.value = false
+        //         editor.loadProjectData(JSON.parse(response.data[0].data))
+        //       })
+        //     console.log(templateItem.value)
+        //   }
+        // },
       ],
     },
     i18n: {
@@ -246,7 +320,7 @@ onMounted(() => {
   });
 
 
-  const pn = editor.value.Panels;
+  const pn = editor.Panels;
   const panelViews = pn.addPanel({
     id: 'options'
   });
@@ -313,120 +387,13 @@ onMounted(() => {
   }]);
 
 
-  const saveModal = editor.value.Modal;
-  const savedataModal = () => {
-    saveModal.open({
-      title: 'ذخیره فرمت نامه',
-      content: `
-    <div class="save-box">
-      <label>نام فرمت خود را وارد کنید : </label>
-      <input type="text" id="save-input">
-    </div>
-    <div class="save-box">
-      <label>عکس قالب را وارد کنید : </label>
-      <input type="file" id="thumbnail-input" accept="image/jpg">
-    </div>
-    <div class="action-box">
-      <button class="save-btn" id="saveBtn">ذخیره</button>
-    </div>
-    `, // string | HTMLElement
-      attributes: {
-        class: 'my-small-modal',
-      },
-    });
-  };
-
-
-  const loadModal = editor.value.Modal;
-  const loadDataModal = () => {
-    loadModal.open({
-      title: 'فرمت خود را انتخاب کنید',
-      content: `
-      <div class="card-box" id="cardBox"></div>`,
-      attributes: {
-        class: 'load-modal'
-      }
-    })
-  }
-
-
-
-
-  editor.value.Storage.add('remote', {
-    async load(x) {
-      console.log(x)
-      // get data from DB
-      // const response = await axios.get(projectEndpoint);
-      // let data = JSON.parse(response.data);
-      // localStorage.setItem('gjs-projects', data);
-      // return data
-
-
-
-      // const response = await axios.get(projectEndpoint);
-      // let data = JSON.parse(response.data[0].templateData)
-      // return data
-
-      // let id = localStorage.getItem('id')
-      // console.log(id)
-
-
-
-
-      //   response.data.map((i, key, { length }) => {
-      //     if (i._id == currentId.value) {
-      //       let data = JSON.parse(i.templateData)
-      //       return data
-      //     } else {
-      //       if (key + 1 == length) {
-      //         let data = JSON.parse(i.templateData)
-      //         return data
-      //       }
-      //     }
-      //   })
-    },
-
-
-
-    async store(data) {
-      console.log(data)
-      // update template
-      currentId.value = data.pages[0].id
-      let x = JSON.parse(localStorage.getItem('gjs-projects'))
-      x.map((i) => {
-        if (i.data.pages[0].id == currentId.value) {
-          i.data = data
-        }
-      })
-      localStorage.setItem('gjs-projects', JSON.stringify(x))
-
-
-      return await axios.post(projectEndpoint, { templateData: x }).then(
-        (response) => {
-          console.log(response)
-        }
-      )
-
-
-      // return await axios.post(projectEndpoint, { id: currentId.value, templateData: data }).then(
-      //   (response) => {
-      //     currentId.value = response.data._id
-      //     localStorage.setItem('id', currentId.value.toString())
-      //   }
-      // );
-    },
-  });
-
-
-
-
-  editor.value.Commands.add('set-device-desktop', {
+  editor.Commands.add('set-device-desktop', {
     run: editor => editor.setDevice('A3')
   });
-  editor.value.Commands.add('set-device-tablet', {
+  editor.Commands.add('set-device-tablet', {
     run: editor => editor.setDevice('A4')
   });
-  editor.value.Commands.add('set-device-mobile', {
+  editor.Commands.add('set-device-mobile', {
     run: editor => editor.setDevice('A5')
   });
 })
@@ -456,7 +423,6 @@ onMounted(() => {
 
 .save-box {
   display: flex;
-  /* flex-direction: column; */
   justify-content: space-between;
   align-items: center;
   direction: rtl;
@@ -480,10 +446,15 @@ onMounted(() => {
 
 .save-btn {
   border: 0;
+  margin: 0.5rem;
   padding: 0.5rem 1rem;
   border-radius: 4px;
   background: #fff;
   cursor: pointer;
+}
+
+.save-btn.submit {
+  background: #858585 !important;
 }
 
 .card-box {
@@ -498,6 +469,7 @@ onMounted(() => {
   border-radius: 4px;
   box-shadow: 0px 0px 8px 0px rgba(117, 117, 117, 0.75);
   margin: 1rem;
+  position: relative;
 }
 
 .card img {
@@ -527,5 +499,19 @@ onMounted(() => {
 .cardBox {
   display: flex;
   flex-wrap: wrap;
+}
+
+.delete-icon {
+  position: absolute;
+  top: -15px;
+  left: -15px;
+  background-color: #fff;
+  margin: 0.3rem;
+  border-radius: 100%;
+  cursor: pointer;
+}
+
+.modal-text{
+  text-align: center;
 }
 </style>

@@ -25,10 +25,11 @@ defineProps<{
 
 .confirm-modal-content {
   display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   width: 40rem;
   height: 25rem;
   overflow: auto;
-  flex-direction: column;
   padding: 1rem;
   background: #fff;
   border-radius: 0.5rem;
