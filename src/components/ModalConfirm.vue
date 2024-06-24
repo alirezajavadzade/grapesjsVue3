@@ -1,7 +1,7 @@
 <template>
   <VueFinalModal class="confirm-modal" content-class="confirm-modal-content" overlay-transition="vfm-fade"
     content-transition="vfm-fade">
-    <h1>{{ title }}</h1>
+      <h1>{{ title }}</h1>
     <slot />
   </VueFinalModal>
 </template>
@@ -17,6 +17,12 @@ defineProps<{
 </script>
 
 <style>
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .confirm-modal {
   display: flex;
   justify-content: center;
